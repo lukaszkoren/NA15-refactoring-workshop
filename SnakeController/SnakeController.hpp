@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "EventT.hpp"
 #include "IEventHandler.hpp"
 #include "SnakeInterface.hpp"
 
@@ -49,6 +50,20 @@ private:
 
     Direction m_currentDirection;
     std::list<Segment> m_segments;
+    Segment& getNewHead(const Segment&, Segment&);
+    void gameLost();
+    void moreFood();
+    void clearOldFood();
+
+    template<class T>
+    void placeNewFood(const T& Food)
+    {
+        DisplayInd placeNewFood;
+        placeNewFood.x = Food.x;
+        placeNewFood.y = Food.y;
+        placeNewFood.value = Cell_FOOD;
+        m_displayPort.send(std::make_unique<EventT<DisplayInd>>(placeNewFood));
+    }
 };
 
 } // namespace Snake

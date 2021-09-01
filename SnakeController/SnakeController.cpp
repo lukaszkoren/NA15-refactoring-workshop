@@ -69,17 +69,14 @@ void Controller::receive(std::unique_ptr<Event> e)
         auto const& timerEvent = *dynamic_cast<EventT<TimeoutInd> const&>(*e);
 
         Segment const& currentHead = m_segments.front();
-
         Segment newHead;
-        newHead.x = currentHead.x + ((m_currentDirection & 0b01) ? (m_currentDirection & 0b10) ? 1 : -1 : 0);
-        newHead.y = currentHead.y + (not (m_currentDirection & 0b01) ? (m_currentDirection & 0b10) ? 1 : -1 : 0);
-        newHead.ttl = currentHead.ttl;
+        newHead = getNewHead(currentHead, newHead);
 
         bool lost = false;
 
         for (auto segment : m_segments) {
             if (segment.x == newHead.x and segment.y == newHead.y) {
-                m_scorePort.send(std::make_unique<EventT<LooseInd>>());
+                gameLost();
                 lost = true;
                 break;
             }
@@ -88,11 +85,11 @@ void Controller::receive(std::unique_ptr<Event> e)
         if (not lost) {
             if (std::make_pair(newHead.x, newHead.y) == m_foodPosition) {
                 m_scorePort.send(std::make_unique<EventT<ScoreInd>>());
-                m_foodPort.send(std::make_unique<EventT<FoodReq>>());
+                moreFood();
             } else if (newHead.x < 0 or newHead.y < 0 or
                        newHead.x >= m_mapDimension.first or
                        newHead.y >= m_mapDimension.second) {
-                m_scorePort.send(std::make_unique<EventT<LooseInd>>());
+                gameLost();
                 lost = true;
             } else {
                 for (auto &segment : m_segments) {
@@ -144,19 +141,10 @@ void Controller::receive(std::unique_ptr<Event> e)
                 }
 
                 if (requestedFoodCollidedWithSnake) {
-                    m_foodPort.send(std::make_unique<EventT<FoodReq>>());
+                    moreFood();
                 } else {
-                    DisplayInd clearOldFood;
-                    clearOldFood.x = m_foodPosition.first;
-                    clearOldFood.y = m_foodPosition.second;
-                    clearOldFood.value = Cell_FREE;
-                    m_displayPort.send(std::make_unique<EventT<DisplayInd>>(clearOldFood));
-
-                    DisplayInd placeNewFood;
-                    placeNewFood.x = receivedFood.x;
-                    placeNewFood.y = receivedFood.y;
-                    placeNewFood.value = Cell_FOOD;
-                    m_displayPort.send(std::make_unique<EventT<DisplayInd>>(placeNewFood));
+                    clearOldFood();
+                    placeNewFood<FoodInd>(receivedFood);
                 }
 
                 m_foodPosition = std::make_pair(receivedFood.x, receivedFood.y);
@@ -174,13 +162,9 @@ void Controller::receive(std::unique_ptr<Event> e)
                     }
 
                     if (requestedFoodCollidedWithSnake) {
-                        m_foodPort.send(std::make_unique<EventT<FoodReq>>());
+                        moreFood();
                     } else {
-                        DisplayInd placeNewFood;
-                        placeNewFood.x = requestedFood.x;
-                        placeNewFood.y = requestedFood.y;
-                        placeNewFood.value = Cell_FOOD;
-                        m_displayPort.send(std::make_unique<EventT<DisplayInd>>(placeNewFood));
+                        placeNewFood<FoodResp>(requestedFood);
                     }
 
                     m_foodPosition = std::make_pair(requestedFood.x, requestedFood.y);
@@ -190,6 +174,30 @@ void Controller::receive(std::unique_ptr<Event> e)
             }
         }
     }
+}
+
+Controller::Segment& Controller::getNewHead(const Segment& currentHead, Segment& newHead){
+    newHead.x = currentHead.x + ((m_currentDirection & 0b01) ? (m_currentDirection & 0b10) ? 1 : -1 : 0);
+    newHead.y = currentHead.y + (not(m_currentDirection & 0b01) ? (m_currentDirection & 0b10) ? 1 : -1 : 0);
+    newHead.ttl = currentHead.ttl;
+    return newHead;
+}
+
+void Controller::gameLost(){
+    m_scorePort.send(std::make_unique<EventT<LooseInd>>());
+}
+
+void Controller::moreFood(){
+    m_foodPort.send(std::make_unique<EventT<FoodReq>>());
+}
+
+void Controller::clearOldFood()
+{
+    DisplayInd clearOldFood;
+    clearOldFood.x = m_foodPosition.first;
+    clearOldFood.y = m_foodPosition.second;
+    clearOldFood.value = Cell_FREE;
+    m_displayPort.send(std::make_unique<EventT<DisplayInd>>(clearOldFood));
 }
 
 } // namespace Snake
